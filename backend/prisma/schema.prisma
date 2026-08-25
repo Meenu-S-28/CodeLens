@@ -1,0 +1,32 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Project {
+  id             String        @id @default(uuid())
+  repositoryUrl  String
+  repositoryHost String
+  status         ProjectStatus @default(CREATED)
+  branch         String?
+  commitSha      String?
+  workspacePath  String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([status])
+  @@index([repositoryHost])
+}
+
+enum ProjectStatus {
+  CREATED
+  CLONING
+  CLONED
+  ANALYZING
+  COMPLETED
+  FAILED
+}
