@@ -7,9 +7,12 @@ export class AppError extends Error {
     code: string,
     message: string,
     statusCode: number,
-    isOperational = true
+    isOperational = true,
+    options?: {
+      cause?: unknown;
+    }
   ) {
-    super(message);
+    super(message, options);
 
     this.name = "AppError";
     this.code = code;

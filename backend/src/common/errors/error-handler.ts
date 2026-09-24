@@ -1,5 +1,8 @@
 import type { ErrorRequestHandler } from "express";
+import { ZodError } from "zod";
+
 import { AppError } from "./app-error.js";
+import { logger } from "../logger.js";
 
 export const errorHandler: ErrorRequestHandler = (
   error,
@@ -7,6 +10,19 @@ export const errorHandler: ErrorRequestHandler = (
   res,
   _next
 ) => {
+  if (error instanceof ZodError) {
+    res.status(400).json({
+      success: false,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Request validation failed",
+        details: error.flatten().fieldErrors,
+      },
+    });
+
+    return;
+  }
+
   if (error instanceof AppError) {
     res.status(error.statusCode).json({
       success: false,
@@ -19,7 +35,16 @@ export const errorHandler: ErrorRequestHandler = (
     return;
   }
 
-  console.error("Unhandled error:", error);
+  logger.error("Unhandled HTTP error", {
+    error:
+      error instanceof Error
+        ? error.message
+        : String(error),
+    stack:
+      error instanceof Error
+        ? error.stack
+        : undefined,
+  });
 
   res.status(500).json({
     success: false,
