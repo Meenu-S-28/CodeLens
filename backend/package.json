@@ -3,21 +3,24 @@
   "version": "1.0.0",
   "type": "module",
   "main": "index.js",
- "scripts": {
-  "dev": "tsx watch src/server.ts",
-  "worker": "tsx src/workers/project-ingestion.worker.ts",
-  "worker:dev": "tsx watch src/workers/project-ingestion.worker.ts",
-  "build": "tsc",
-  "start": "node dist/server.js",
-  "prisma:generate": "prisma generate",
-  "prisma:migrate": "prisma migrate dev",
-  "prisma:studio": "prisma studio"
-},
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "worker": "tsx src/workers/project-ingestion.worker.ts",
+    "worker:dev": "tsx watch src/workers/project-ingestion.worker.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@babel/parser": "^7.29.9",
+    "@babel/traverse": "^7.29.8",
+    "@babel/types": "^7.29.8",
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
     "bullmq": "^6.1.2",
@@ -31,6 +34,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/babel__traverse": "^7.28.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^26.2.0",

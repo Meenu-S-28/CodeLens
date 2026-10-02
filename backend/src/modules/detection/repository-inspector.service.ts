@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { AppError } from "../../common/errors/app-error.js";
+import { toPortablePath } from "../../common/utils/path.utils.js";
 import { workspaceService } from "../ingestion/workspace.service.js";
 import { IGNORED_DIRECTORIES } from "./detection.constants.js";
 
@@ -15,18 +16,9 @@ export class RepositoryInspector {
     return workspaceService.getRepositoryPath(projectId);
   }
 
-  async readFile(
-    projectId: string,
-    relativePath: string
-  ): Promise<string> {
-    const repositoryPath =
-      this.getRepositoryPath(projectId);
-
-    const filePath = this.resolveSafePath(
-      repositoryPath,
-      relativePath
-    );
-
+  async readFile(projectId: string, relativePath: string): Promise<string> {
+    const repositoryPath = this.getRepositoryPath(projectId);
+    const filePath = this.resolveSafePath(repositoryPath, relativePath);
     return fs.readFile(filePath, "utf-8");
   }
 
@@ -34,13 +26,8 @@ export class RepositoryInspector {
     projectId: string,
     relativePath: string
   ): Promise<boolean> {
-    const repositoryPath =
-      this.getRepositoryPath(projectId);
-
-    const filePath = this.resolveSafePath(
-      repositoryPath,
-      relativePath
-    );
+    const repositoryPath = this.getRepositoryPath(projectId);
+    const filePath = this.resolveSafePath(repositoryPath, relativePath);
 
     try {
       await fs.access(filePath);
@@ -54,131 +41,104 @@ export class RepositoryInspector {
     projectId: string,
     relativePath = ""
   ): Promise<string[]> {
-    const repositoryPath =
-      this.getRepositoryPath(projectId);
-
-    const directoryPath = this.resolveSafePath(
-      repositoryPath,
-      relativePath
-    );
+    const repositoryPath = this.getRepositoryPath(projectId);
+    const directoryPath = this.resolveSafePath(repositoryPath, relativePath);
 
     const entries = await fs.readdir(directoryPath, {
       withFileTypes: true,
     });
 
     return entries
-      .filter(
-        (entry) =>
-          !IGNORED_DIRECTORIES.has(entry.name)
-      )
+      .filter((entry) => !IGNORED_DIRECTORIES.has(entry.name))
       .map((entry) => entry.name);
   }
 
-  async findSourceFiles(
-    projectId: string
-  ): Promise<RepositoryFile[]> {
-    const repositoryPath =
-      this.getRepositoryPath(projectId);
-
+  async findSourceFiles(projectId: string): Promise<RepositoryFile[]> {
+    const repositoryPath = this.getRepositoryPath(projectId);
     const result: RepositoryFile[] = [];
 
-    await this.walkDirectory(
+    await this.walkDirectory(repositoryPath, repositoryPath, result);
+
+    return result;
+  }
+
+  async findFilesByName(
+    projectId: string,
+    fileName: string,
+    maxDepth = 6
+  ): Promise<string[]> {
+    const repositoryPath = this.getRepositoryPath(projectId);
+    const result: string[] = [];
+
+    await this.findFilesByNameRecursive(
       repositoryPath,
       repositoryPath,
+      fileName,
+      0,
+      maxDepth,
       result
     );
 
     return result;
   }
-  
-  async findFilesByName(
-  projectId: string,
-  fileName: string,
-  maxDepth = 6
-): Promise<string[]> {
-  const repositoryPath = this.getRepositoryPath(projectId);
-  const result: string[] = [];
 
-  await this.findFilesByNameRecursive(
-    repositoryPath,
-    repositoryPath,
-    fileName,
-    0,
-    maxDepth,
-    result
-  );
-
-  return result;
-}
-
-private async findFilesByNameRecursive(
-  repositoryRoot: string,
-  currentDirectory: string,
-  fileName: string,
-  currentDepth: number,
-  maxDepth: number,
-  result: string[]
-): Promise<void> {
-  if (currentDepth > maxDepth) {
-    return;
-  }
-
-  const entries = await fs.readdir(currentDirectory, {
-    withFileTypes: true,
-  });
-
-  for (const entry of entries) {
-    if (IGNORED_DIRECTORIES.has(entry.name)) {
-      continue;
+  private async findFilesByNameRecursive(
+    repositoryRoot: string,
+    currentDirectory: string,
+    fileName: string,
+    currentDepth: number,
+    maxDepth: number,
+    result: string[]
+  ): Promise<void> {
+    if (currentDepth > maxDepth) {
+      return;
     }
 
-    if (entry.isSymbolicLink()) {
-      continue;
-    }
+    const entries = await fs.readdir(currentDirectory, {
+      withFileTypes: true,
+    });
 
-    const absolutePath = path.join(
-      currentDirectory,
-      entry.name
-    );
+    for (const entry of entries) {
+      if (IGNORED_DIRECTORIES.has(entry.name)) {
+        continue;
+      }
 
-    if (entry.isDirectory()) {
-      await this.findFilesByNameRecursive(
-        repositoryRoot,
-        absolutePath,
-        fileName,
-        currentDepth + 1,
-        maxDepth,
-        result
+      if (entry.isSymbolicLink()) {
+        continue;
+      }
+
+      const absolutePath = path.join(currentDirectory, entry.name);
+
+      if (entry.isDirectory()) {
+        await this.findFilesByNameRecursive(
+          repositoryRoot,
+          absolutePath,
+          fileName,
+          currentDepth + 1,
+          maxDepth,
+          result
+        );
+        continue;
+      }
+
+      if (!entry.isFile() || entry.name !== fileName) {
+        continue;
+      }
+
+      result.push(
+        toPortablePath(path.relative(repositoryRoot, absolutePath))
       );
-
-      continue;
     }
-
-    if (!entry.isFile()) {
-      continue;
-    }
-
-    if (entry.name !== fileName) {
-      continue;
-    }
-
-    result.push(
-      path.relative(repositoryRoot, absolutePath)
-    );
   }
-}
 
   private async walkDirectory(
     repositoryRoot: string,
     currentDirectory: string,
     result: RepositoryFile[]
   ): Promise<void> {
-    const entries = await fs.readdir(
-      currentDirectory,
-      {
-        withFileTypes: true,
-      }
-    );
+    const entries = await fs.readdir(currentDirectory, {
+      withFileTypes: true,
+    });
 
     for (const entry of entries) {
       if (
@@ -188,18 +148,14 @@ private async findFilesByNameRecursive(
         continue;
       }
 
-      const absolutePath = path.join(
-        currentDirectory,
-        entry.name
-      );
+      if (entry.isSymbolicLink()) {
+        continue;
+      }
+
+      const absolutePath = path.join(currentDirectory, entry.name);
 
       if (entry.isDirectory()) {
-        await this.walkDirectory(
-          repositoryRoot,
-          absolutePath,
-          result
-        );
-
+        await this.walkDirectory(repositoryRoot, absolutePath, result);
         continue;
       }
 
@@ -207,17 +163,15 @@ private async findFilesByNameRecursive(
         continue;
       }
 
-      const extension =
-        path.extname(entry.name).toLowerCase();
+      const extension = path.extname(entry.name).toLowerCase();
 
       if (!extension) {
         continue;
       }
 
       result.push({
-        relativePath: path.relative(
-          repositoryRoot,
-          absolutePath
+        relativePath: toPortablePath(
+          path.relative(repositoryRoot, absolutePath)
         ),
         extension,
       });
@@ -228,15 +182,9 @@ private async findFilesByNameRecursive(
     repositoryPath: string,
     relativePath: string
   ): string {
-    const resolvedPath = path.resolve(
-      repositoryPath,
-      relativePath
-    );
+    const resolvedPath = path.resolve(repositoryPath, relativePath);
 
-    const relative = path.relative(
-      repositoryPath,
-      resolvedPath
-    );
+    const relative = path.relative(repositoryPath, resolvedPath);
 
     if (
       relative.startsWith("..") ||
